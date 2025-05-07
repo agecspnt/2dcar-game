@@ -19,6 +19,17 @@ RED = (255, 0, 0) # Added for Game Over message
 game_over_font = pygame.font.Font(None, 74)
 restart_quit_font = pygame.font.Font(None, 36) # Font for restart/quit messages
 
+# Sprite and Scaling Constants
+CAR_SPRITE_WIDTH = 16
+CAR_SPRITE_HEIGHT = 16
+SCALED_CAR_WIDTH = 64
+SCALED_CAR_HEIGHT = 64
+
+OBSTACLE_SPRITE_WIDTH = 16
+OBSTACLE_SPRITE_HEIGHT = 16
+SCALED_OBSTACLE_WIDTH = 48
+SCALED_OBSTACLE_HEIGHT = 48
+
 # Function to display Game Over message
 def display_game_over_message(surface):
     text_surface = game_over_font.render('Game Over', True, RED)
@@ -29,24 +40,28 @@ def display_game_over_message(surface):
     restart_rect = restart_text.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 + 30))
     surface.blit(restart_text, restart_rect)
 
-# Load car image
+# Load car image (spritesheet processing)
 try:
-    car_image = pygame.image.load("craftpix-889156-free-racing-game-kit/PNG/Car_1_Main_Positions/Car_1_01.png")
-    car_image = pygame.transform.scale(car_image, (100, 200)) # Adjust size as needed
+    loaded_car_spritesheet = pygame.image.load("Mini Pixel Pack 2/Cars/Player_red (16 x 16).png").convert_alpha()
+    # Extract the first car sprite (0,0) with size CAR_SPRITE_WIDTH x CAR_SPRITE_HEIGHT
+    player_car_image_template = loaded_car_spritesheet.subsurface(pygame.Rect(0, 0, CAR_SPRITE_WIDTH, CAR_SPRITE_HEIGHT))
+    scaled_player_car_image = pygame.transform.scale(player_car_image_template, (SCALED_CAR_WIDTH, SCALED_CAR_HEIGHT))
 except pygame.error as e:
     print(f"Unable to load car image: {e}")
     # Create a placeholder surface if image loading fails
-    car_image = pygame.Surface((50, 100))
-    car_image.fill(BLACK) # Fill with a color, e.g., black
+    scaled_player_car_image = pygame.Surface((SCALED_CAR_WIDTH, SCALED_CAR_HEIGHT))
+    scaled_player_car_image.fill(BLACK) # Fill with a color, e.g., black
 
-# Load obstacle image
+# Load obstacle spritesheet
 try:
-    obstacle_image = pygame.image.load("craftpix-889156-free-racing-game-kit/PNG/Game_Props_Items/Barrel_01.png")
-    obstacle_image = pygame.transform.scale(obstacle_image, (70, 70)) # Adjust size as needed
+    loaded_obstacle_spritesheet = pygame.image.load("Mini Pixel Pack 2/Props/Misc_props (16 x 16).png").convert_alpha()
 except pygame.error as e:
-    print(f"Unable to load obstacle image: {e}")
-    obstacle_image = pygame.Surface((50, 50))
-    obstacle_image.fill(BLACK) # Placeholder
+    print(f"Unable to load obstacle spritesheet: {e}")
+    loaded_obstacle_spritesheet = None
+
+# Placeholder surface if obstacle spritesheet loading fails, for the Obstacle class to use
+default_obstacle_surface = pygame.Surface((SCALED_OBSTACLE_WIDTH, SCALED_OBSTACLE_HEIGHT))
+default_obstacle_surface.fill(BLACK)
 
 # Player Car Class
 class PlayerCar(pygame.sprite.Sprite):
@@ -72,9 +87,24 @@ class PlayerCar(pygame.sprite.Sprite):
 
 # Obstacle Class
 class Obstacle(pygame.sprite.Sprite):
-    def __init__(self, x, y, speed):
+    def __init__(self, x, y, speed, spritesheet): # Added spritesheet parameter
         super().__init__()
-        self.image = obstacle_image
+        
+        if spritesheet:
+            # Assuming sprites are arranged horizontally, each OBSTACLE_SPRITE_WIDTH wide
+            num_sprites = spritesheet.get_width() // OBSTACLE_SPRITE_WIDTH
+            if num_sprites > 0:
+                sprite_index = random.randint(0, num_sprites - 1)
+                sprite_x_offset = sprite_index * OBSTACLE_SPRITE_WIDTH
+                
+                sub_image = spritesheet.subsurface(pygame.Rect(sprite_x_offset, 0, OBSTACLE_SPRITE_WIDTH, OBSTACLE_SPRITE_HEIGHT))
+                self.image = pygame.transform.scale(sub_image, (SCALED_OBSTACLE_WIDTH, SCALED_OBSTACLE_HEIGHT))
+            else: # Spritesheet might be empty or not wide enough
+                self.image = default_obstacle_surface.copy()
+        else:
+            # Use a placeholder if spritesheet failed to load or was None
+            self.image = default_obstacle_surface.copy()
+
         self.rect = self.image.get_rect()
         self.rect.x = x
         self.rect.y = y
@@ -85,7 +115,7 @@ class Obstacle(pygame.sprite.Sprite):
         if self.rect.top > SCREEN_HEIGHT:
             self.kill() # Remove obstacle if it goes off screen
 
-player_car = PlayerCar(car_image, (SCREEN_WIDTH - car_image.get_width()) // 2, SCREEN_HEIGHT - car_image.get_height() - 10)
+player_car = PlayerCar(scaled_player_car_image, (SCREEN_WIDTH - SCALED_CAR_WIDTH) // 2, SCREEN_HEIGHT - SCALED_CAR_HEIGHT - 10)
 all_sprites = pygame.sprite.Group()
 all_sprites.add(player_car)
 
@@ -101,7 +131,7 @@ game_over = False
 # Function to reset the game state
 def reset_game():
     global player_car, obstacles, all_sprites, obstacle_spawn_timer, game_over, camera_x
-    player_car = PlayerCar(car_image, (SCREEN_WIDTH - car_image.get_width()) // 2, SCREEN_HEIGHT - car_image.get_height() - 10)
+    player_car = PlayerCar(scaled_player_car_image, (SCREEN_WIDTH - SCALED_CAR_WIDTH) // 2, SCREEN_HEIGHT - SCALED_CAR_HEIGHT - 10)
     all_sprites = pygame.sprite.Group()
     all_sprites.add(player_car)
     obstacles = pygame.sprite.Group()
@@ -149,8 +179,8 @@ while running:
         obstacle_spawn_timer += 1
         if obstacle_spawn_timer >= obstacle_spawn_delay:
             obstacle_spawn_timer = 0
-            obstacle_x = random.randint(0, SCREEN_WIDTH - obstacle_image.get_width())
-            new_obstacle = Obstacle(obstacle_x, -obstacle_image.get_height(), obstacle_speed)
+            obstacle_x = random.randint(0, SCREEN_WIDTH - SCALED_OBSTACLE_WIDTH)
+            new_obstacle = Obstacle(obstacle_x, -SCALED_OBSTACLE_HEIGHT, obstacle_speed, loaded_obstacle_spritesheet)
             obstacles.add(new_obstacle)
             all_sprites.add(new_obstacle) # Add obstacles to all_sprites to be drawn
 
