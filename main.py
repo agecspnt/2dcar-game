@@ -25,11 +25,6 @@ CAR_SPRITE_HEIGHT = 16
 SCALED_CAR_WIDTH = 64
 SCALED_CAR_HEIGHT = 64
 
-OBSTACLE_SPRITE_WIDTH = 16
-OBSTACLE_SPRITE_HEIGHT = 16
-SCALED_OBSTACLE_WIDTH = 48
-SCALED_OBSTACLE_HEIGHT = 48
-
 # Background Tile Constants
 DESERT_SPRITESHEET_PATH = "Mini Pixel Pack 2/Levels/Desert_details (16 x 16).png"
 TILE_SPRITE_WIDTH = 16
@@ -37,6 +32,8 @@ TILE_SPRITE_HEIGHT = 16
 SCALED_TILE_WIDTH = 64
 SCALED_TILE_HEIGHT = 64
 NUM_TILE_TYPES = 4
+
+ROCK_COLLISION_RADIUS = 8 # Radius for rock collision circle
 
 # Background Scroll Speed
 BACKGROUND_SCROLL_SPEED_Y = 2 # Pixels per frame for vertical scroll
@@ -65,6 +62,7 @@ except pygame.error as e:
 
 # Load desert background tiles
 desert_tile_images = []
+rock_tile_image_reference = None # To store a reference to the rock tile image
 try:
     loaded_desert_spritesheet = pygame.image.load(DESERT_SPRITESHEET_PATH).convert_alpha()
     for i in range(NUM_TILE_TYPES):
@@ -72,6 +70,8 @@ try:
         original_tile = loaded_desert_spritesheet.subsurface(tile_rect)
         scaled_tile = pygame.transform.scale(original_tile, (SCALED_TILE_WIDTH, SCALED_TILE_HEIGHT))
         desert_tile_images.append(scaled_tile)
+    if NUM_TILE_TYPES == 4 and len(desert_tile_images) == 4: # Assuming rock is the 4th tile (index 3) based on weights
+        rock_tile_image_reference = desert_tile_images[3]
 except pygame.error as e:
     print(f"Unable to load desert tiles: {e}")
     # Create placeholder surfaces if image loading fails
@@ -81,15 +81,15 @@ except pygame.error as e:
         desert_tile_images.append(placeholder_tile)
 
 # Load obstacle spritesheet
-try:
-    loaded_obstacle_spritesheet = pygame.image.load("Mini Pixel Pack 2/Props/Misc_props (16 x 16).png").convert_alpha()
-except pygame.error as e:
-    print(f"Unable to load obstacle spritesheet: {e}")
-    loaded_obstacle_spritesheet = None
+# try:
+#     loaded_obstacle_spritesheet = pygame.image.load("Mini Pixel Pack 2/Props/Misc_props (16 x 16).png").convert_alpha()
+# except pygame.error as e:
+#     print(f"Unable to load obstacle spritesheet: {e}")
+#     loaded_obstacle_spritesheet = None
 
 # Placeholder surface if obstacle spritesheet loading fails, for the Obstacle class to use
-default_obstacle_surface = pygame.Surface((SCALED_OBSTACLE_WIDTH, SCALED_OBSTACLE_HEIGHT))
-default_obstacle_surface.fill(BLACK)
+# default_obstacle_surface = pygame.Surface((SCALED_OBSTACLE_WIDTH, SCALED_OBSTACLE_HEIGHT))
+# default_obstacle_surface.fill(BLACK)
 
 # Player Car Class
 class PlayerCar(pygame.sprite.Sprite):
@@ -156,16 +156,56 @@ obstacle_speed = 5 # Adjusted obstacle speed
 # Game state
 game_over = False
 
+# Invincibility state
+player_invincible = False
+invincibility_timer = 0
+INVINCIBILITY_DURATION = 2000 # milliseconds (2 seconds)
+blink_timer = 0
+BLINK_INTERVAL = 200 # milliseconds (for blinking effect)
+player_visible = True # Controls if the player car is drawn
+
 # Function to reset the game state
 def reset_game():
-    global player_car, obstacles, all_sprites, obstacle_spawn_timer, game_over, camera_x
+    global player_car, all_sprites, game_over, camera_x, \
+           player_invincible, invincibility_timer, blink_timer, player_visible
     player_car = PlayerCar(scaled_player_car_image, (SCREEN_WIDTH - SCALED_CAR_WIDTH) // 2, SCREEN_HEIGHT - SCALED_CAR_HEIGHT - 10)
     all_sprites = pygame.sprite.Group()
     all_sprites.add(player_car)
-    obstacles = pygame.sprite.Group()
-    obstacle_spawn_timer = 0
     camera_x = 0
     game_over = False
+    
+    # Always grant invincibility on reset
+    player_invincible = True
+    invincibility_timer = 0
+    blink_timer = 0
+    player_visible = True
+
+    # Clear rocks from player's starting area
+    if background_layout and rock_tile_image_reference and desert_tile_images:
+        player_center_x = player_car.rect.centerx
+        player_center_y = player_car.rect.centery
+
+        center_tile_col = player_center_x // SCALED_TILE_WIDTH
+        center_tile_row = player_center_y // SCALED_TILE_HEIGHT
+
+        safe_zone_radius = 1 # Clear a 3x3 area (1 tile around the center tile)
+        safe_tile = desert_tile_images[0] # Assuming this is a plain, safe tile
+
+        LAYOUT_NUM_ROWS = len(background_layout)
+        LAYOUT_NUM_COLS = len(background_layout[0]) if LAYOUT_NUM_ROWS > 0 else 0
+
+        if LAYOUT_NUM_COLS > 0: # Ensure layout is not empty
+            for dr in range(-safe_zone_radius, safe_zone_radius + 1):
+                for dc in range(-safe_zone_radius, safe_zone_radius + 1):
+                    r = center_tile_row + dr
+                    c = center_tile_col + dc
+
+                    # Check bounds for the background_layout array
+                    if 0 <= r < LAYOUT_NUM_ROWS and 0 <= c < LAYOUT_NUM_COLS:
+                        if background_layout[r][c] is rock_tile_image_reference:
+                            # Ensure we don't try to replace a rock with itself if safe_tile was somehow a rock
+                            if rock_tile_image_reference is not safe_tile: 
+                                background_layout[r][c] = safe_tile
 
 # Game loop
 running = True
@@ -218,6 +258,8 @@ while running:
     keys = pygame.key.get_pressed()
     
     if not game_over:
+        dt = clock.get_time() # Get delta time for timers, once per frame
+
         # Update player car
         player_car.update(keys) # Call update once with the current keys state
 
@@ -231,14 +273,21 @@ while running:
         # Update background vertical scroll
         background_scroll_y = (background_scroll_y - BACKGROUND_SCROLL_SPEED_Y) # Changed + to - for downward scroll
 
-        # Spawn obstacles
-        obstacle_spawn_timer += 1
-        if obstacle_spawn_timer >= obstacle_spawn_delay:
-            obstacle_spawn_timer = 0
-            obstacle_x = random.randint(0, SCREEN_WIDTH - SCALED_OBSTACLE_WIDTH)
-            new_obstacle = Obstacle(obstacle_x, -SCALED_OBSTACLE_HEIGHT, obstacle_speed, loaded_obstacle_spritesheet)
-            obstacles.add(new_obstacle)
-            all_sprites.add(new_obstacle) # Add obstacles to all_sprites to be drawn
+        # Handle invincibility and blinking
+        if player_invincible:
+            invincibility_timer += dt
+            if invincibility_timer >= INVINCIBILITY_DURATION:
+                player_invincible = False
+                player_visible = True # Ensure player is visible when invincibility ends
+            else:
+                blink_timer += dt
+                if blink_timer >= BLINK_INTERVAL:
+                    player_visible = not player_visible
+                    blink_timer = 0
+        else:
+            # If not invincible and car is alive, it should be visible
+            if player_car.alive():
+                player_visible = True
 
         # Update obstacles
         obstacles.update()
@@ -250,6 +299,63 @@ while running:
             player_car.kill()
             game_over = True
             # running = False # We will handle game over screen within the loop
+
+        # New collision logic with background rock tiles
+        if not player_invincible and rock_tile_image_reference and player_car.alive():
+            player_screen_rect_collision = pygame.Rect(
+                SCREEN_WIDTH // 2 - player_car.rect.width // 2, 
+                player_car.rect.y, 
+                player_car.rect.width, 
+                player_car.rect.height
+            )
+
+            start_col_idx_in_layout_collision = (camera_x // SCALED_TILE_WIDTH)
+            offset_x_collision = camera_x % SCALED_TILE_WIDTH
+            start_row_idx_in_layout_collision = (background_scroll_y // SCALED_TILE_HEIGHT)
+            offset_y_collision = background_scroll_y % SCALED_TILE_HEIGHT
+            
+            num_tiles_to_check_wide = TILES_WIDE + 1
+            num_tiles_to_check_high = TILES_HIGH + 1
+            
+            LAYOUT_NUM_ROWS_COLLISION = len(background_layout)
+            LAYOUT_NUM_COLS_COLLISION = len(background_layout[0]) if LAYOUT_NUM_ROWS_COLLISION > 0 else 0
+
+            collision_detected_this_frame = False
+            if LAYOUT_NUM_COLS_COLLISION > 0:
+                for j_coll in range(num_tiles_to_check_high):
+                    if collision_detected_this_frame: break
+                    actual_layout_row_coll = (start_row_idx_in_layout_collision + j_coll) % LAYOUT_NUM_ROWS_COLLISION
+                    screen_y_pos_coll = j_coll * SCALED_TILE_HEIGHT - offset_y_collision
+                    
+                    for i_coll in range(num_tiles_to_check_wide):
+                        actual_layout_col_coll = (start_col_idx_in_layout_collision + i_coll) % LAYOUT_NUM_COLS_COLLISION
+                        tile_image_to_check = background_layout[actual_layout_row_coll][actual_layout_col_coll]
+                        
+                        if tile_image_to_check is rock_tile_image_reference:
+                            # Circle collision for rocks
+                            rock_screen_x_pos = i_coll * SCALED_TILE_WIDTH - offset_x_collision
+                            rock_screen_y_pos = j_coll * SCALED_TILE_HEIGHT - offset_y_collision # This was missing in conceptual step, needed for y
+
+                            rock_circle_center_x = rock_screen_x_pos + SCALED_TILE_WIDTH // 2
+                            rock_circle_center_y = rock_screen_y_pos + SCALED_TILE_HEIGHT // 2
+
+                            car_rect = player_screen_rect_collision
+
+                            # Find closest point on car_rect to rock_circle_center
+                            closest_x = max(car_rect.left, min(rock_circle_center_x, car_rect.right))
+                            closest_y = max(car_rect.top, min(rock_circle_center_y, car_rect.bottom))
+
+                            # Calculate distance squared
+                            distance_x = rock_circle_center_x - closest_x
+                            distance_y = rock_circle_center_y - closest_y
+                            distance_squared = (distance_x ** 2) + (distance_y ** 2)
+
+                            if distance_squared < (ROCK_COLLISION_RADIUS ** 2):
+                                print("Collision with rock tile detected!")
+                                if player_car.alive(): player_car.kill()
+                                game_over = True
+                                collision_detected_this_frame = True
+                                break
 
     # Drawing...
     screen.fill(WHITE)  # Fill screen with white
@@ -294,8 +400,9 @@ while running:
     # The player_car.rect.x is its world position. To draw it centered:
     # Only draw player car if not game over, or draw it differently
     if player_car.alive(): # Check if player_car sprite still exists
-        player_screen_x = SCREEN_WIDTH // 2 - player_car.rect.width // 2
-        screen.blit(player_car.image, (player_screen_x, player_car.rect.y))
+        if player_visible: # Only draw if player is set to be visible (for blinking)
+            player_screen_x = SCREEN_WIDTH // 2 - player_car.rect.width // 2
+            screen.blit(player_car.image, (player_screen_x, player_car.rect.y))
 
     if game_over:
         display_game_over_message(screen)
