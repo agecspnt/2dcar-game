@@ -1,0 +1,51 @@
+Project Title: Simple 2D Car Game
+
+1.  **Introduction**
+    Create a simple 2D car game using Python. The player's car will move from the bottom of the screen upwards, and the camera will continuously follow the car. The game ends if the car collides with any obstacles.
+
+2.  **Core Features**
+    2.1. **Player Car Movement:**
+        2.1.1. The player's car starts at the bottom center of the screen.
+        2.1.2. The car moves upwards continuously.
+        2.1.3. The player can control the car to move side to side (switch lanes).
+    2.2. **Obstacles:**
+        2.2.1. Obstacles will appear on the screen.
+        2.2.2. The car must avoid colliding with these obstacles.
+    2.3. **Scrolling Environment:**
+        2.3.1. Implement a scrolling background or moving obstacles to simulate forward movement.
+    2.4. **Camera:**
+        2.4.1. The game camera will continuously follow the player's car, keeping it as the focus.
+    2.5. **Collision Detection:**
+        2.5.1. Detect collisions between the player's car and obstacles.
+    2.6. **Game Over State:**
+        2.6.1. If a collision occurs, the game enters a "Game Over" state.
+        2.6.2. Consider adding a game-over notification.
+
+3.  **Assets**
+    3.1. Player's car: Use `car.png`.
+    3.2. Obstacles: Use `obstacle.png`.
+
+4.  **Technical Requirements**
+    4.1. **Programming Language:** Python.
+    4.2. **Graphics Library:** A suitable Python library for handling graphics, such as Pygame.
+    4.3. **Image Loading:** Load and display `car.png` and `obstacle.png`.
+    4.4. **Game Loop:** Implement a main game loop to handle updates, events, and collision checks.
+    4.5. **Code Structure:** Structure the code with functions for readability and maintenance.
+    4.6. **Performance:** Optimize for smooth graphics performance.
+
+5.  **Development Steps Overview**
+    5.1. Set up Python environment with necessary libraries (e.g., Pygame).
+    5.2. Load `car.png` and `obstacle.png`.
+    5.3. Design game window and initialize car at the bottom center.
+    5.4. Implement continuous upward movement and side-to-side controls.
+    5.5. Create scrolling background/moving obstacles.
+    5.6. Implement collision detection.
+    5.7. Implement camera follow.
+    5.8. Implement main game loop.
+
+6.  **Output Format**
+    6.1. A properly formatted Python script file.
+    6.2. Comments explaining each section of the code.
+
+7.  **Optional Enhancements**
+    7.1. Game-over sounds. 
