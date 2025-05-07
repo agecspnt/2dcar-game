@@ -83,6 +83,7 @@ obstacle_speed = 5 # Adjusted obstacle speed
 # Game loop
 running = True
 clock = pygame.time.Clock() # For managing FPS
+camera_x = 0 # Initialize camera_x
 
 while running:
     for event in pygame.event.get():
@@ -94,6 +95,19 @@ while running:
     
     # Update player car
     player_car.update(keys) # Call update once with the current keys state
+
+    # Update camera based on player's position
+    # The camera tries to keep the player in the middle of the screen.
+    # The player's rect.x is its "world" position.
+    camera_x = player_car.rect.centerx - SCREEN_WIDTH // 2
+    # Clamp camera to prevent showing too much empty space if the world is smaller than the screen
+    # For now, assume world is at least as wide as the screen, or player is bounded.
+    # If we had a defined world width:
+    # world_width = 1600 # Example world width
+    # if camera_x < 0:
+    #     camera_x = 0
+    # if camera_x > world_width - SCREEN_WIDTH:
+    #     camera_x = world_width - SCREEN_WIDTH
 
     # Spawn obstacles
     obstacle_spawn_timer += 1
@@ -118,7 +132,16 @@ while running:
     # Drawing
     screen.fill(WHITE)  # Fill screen with white
 
-    all_sprites.draw(screen) # Draw all sprites (player car and obstacles)
+    # Draw obstacles with camera offset
+    for obstacle in obstacles:
+        # Create a new rect for drawing, offset by the camera
+        obstacle_draw_rect = obstacle.rect.move(-camera_x, 0)
+        screen.blit(obstacle.image, obstacle_draw_rect)
+
+    # Draw the player car - it's drawn relative to the screen, effectively centered by the camera
+    # The player_car.rect.x is its world position. To draw it centered:
+    player_screen_x = SCREEN_WIDTH // 2 - player_car.rect.width // 2
+    screen.blit(player_car.image, (player_screen_x, player_car.rect.y))
 
     pygame.display.flip()  # Update the full display
     
