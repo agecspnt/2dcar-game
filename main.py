@@ -13,6 +13,21 @@ pygame.display.set_caption("2D Car Game")
 # Colors
 WHITE = (255, 255, 255)
 BLACK = (0, 0, 0)
+RED = (255, 0, 0) # Added for Game Over message
+
+# Font for Game Over message
+game_over_font = pygame.font.Font(None, 74)
+restart_quit_font = pygame.font.Font(None, 36) # Font for restart/quit messages
+
+# Function to display Game Over message
+def display_game_over_message(surface):
+    text_surface = game_over_font.render('Game Over', True, RED)
+    text_rect = text_surface.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 - 30))
+    surface.blit(text_surface, text_rect)
+
+    restart_text = restart_quit_font.render('Press R to Restart or Q to Quit', True, BLACK)
+    restart_rect = restart_text.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 + 30))
+    surface.blit(restart_text, restart_rect)
 
 # Load car image
 try:
@@ -80,6 +95,20 @@ obstacle_spawn_timer = 0
 obstacle_spawn_delay = 100 # Adjusted spawn delay
 obstacle_speed = 5 # Adjusted obstacle speed
 
+# Game state
+game_over = False
+
+# Function to reset the game state
+def reset_game():
+    global player_car, obstacles, all_sprites, obstacle_spawn_timer, game_over, camera_x
+    player_car = PlayerCar(car_image, (SCREEN_WIDTH - car_image.get_width()) // 2, SCREEN_HEIGHT - car_image.get_height() - 10)
+    all_sprites = pygame.sprite.Group()
+    all_sprites.add(player_car)
+    obstacles = pygame.sprite.Group()
+    obstacle_spawn_timer = 0
+    camera_x = 0
+    game_over = False
+
 # Game loop
 running = True
 clock = pygame.time.Clock() # For managing FPS
@@ -89,45 +118,52 @@ while running:
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
             running = False
+        if event.type == pygame.KEYDOWN:
+            if game_over:
+                if event.key == pygame.K_r:
+                    reset_game()
+                if event.key == pygame.K_q:
+                    running = False
 
     # Handle key presses
     keys = pygame.key.get_pressed()
     
-    # Update player car
-    player_car.update(keys) # Call update once with the current keys state
+    if not game_over:
+        # Update player car
+        player_car.update(keys) # Call update once with the current keys state
 
-    # Update camera based on player's position
-    # The camera tries to keep the player in the middle of the screen.
-    # The player's rect.x is its "world" position.
-    camera_x = player_car.rect.centerx - SCREEN_WIDTH // 2
-    # Clamp camera to prevent showing too much empty space if the world is smaller than the screen
-    # For now, assume world is at least as wide as the screen, or player is bounded.
-    # If we had a defined world width:
-    # world_width = 1600 # Example world width
-    # if camera_x < 0:
-    #     camera_x = 0
-    # if camera_x > world_width - SCREEN_WIDTH:
-    #     camera_x = world_width - SCREEN_WIDTH
+        # Update camera based on player's position
+        # The camera tries to keep the player in the middle of the screen.
+        # The player's rect.x is its "world" position.
+        camera_x = player_car.rect.centerx - SCREEN_WIDTH // 2
+        # Clamp camera to prevent showing too much empty space if the world is smaller than the screen
+        # For now, assume world is at least as wide as the screen, or player is bounded.
+        # If we had a defined world width:
+        # world_width = 1600 # Example world width
+        # if camera_x < 0:
+        #     camera_x = 0
+        # if camera_x > world_width - SCREEN_WIDTH:
+        #     camera_x = world_width - SCREEN_WIDTH
 
-    # Spawn obstacles
-    obstacle_spawn_timer += 1
-    if obstacle_spawn_timer >= obstacle_spawn_delay:
-        obstacle_spawn_timer = 0
-        obstacle_x = random.randint(0, SCREEN_WIDTH - obstacle_image.get_width())
-        new_obstacle = Obstacle(obstacle_x, -obstacle_image.get_height(), obstacle_speed)
-        obstacles.add(new_obstacle)
-        all_sprites.add(new_obstacle) # Add obstacles to all_sprites to be drawn
+        # Spawn obstacles
+        obstacle_spawn_timer += 1
+        if obstacle_spawn_timer >= obstacle_spawn_delay:
+            obstacle_spawn_timer = 0
+            obstacle_x = random.randint(0, SCREEN_WIDTH - obstacle_image.get_width())
+            new_obstacle = Obstacle(obstacle_x, -obstacle_image.get_height(), obstacle_speed)
+            obstacles.add(new_obstacle)
+            all_sprites.add(new_obstacle) # Add obstacles to all_sprites to be drawn
 
-    # Update obstacles
-    obstacles.update()
+        # Update obstacles
+        obstacles.update()
 
-    # Check for collisions
-    collided_obstacles = pygame.sprite.spritecollide(player_car, obstacles, True) # True: kill obstacle on collision
-    if collided_obstacles:
-        print("Collision detected!")
-        # For now, let's just remove the car. In a real game, you'd handle game over.
-        player_car.kill() 
-        running = False # End the game or trigger game over state
+        # Check for collisions
+        collided_obstacles = pygame.sprite.spritecollide(player_car, obstacles, True) # True: kill obstacle on collision
+        if collided_obstacles:
+            print("Collision detected!")
+            player_car.kill()
+            game_over = True
+            # running = False # We will handle game over screen within the loop
 
     # Drawing...
     screen.fill(WHITE)  # Fill screen with white
@@ -140,8 +176,14 @@ while running:
 
     # Draw the player car - it's drawn relative to the screen, effectively centered by the camera
     # The player_car.rect.x is its world position. To draw it centered:
-    player_screen_x = SCREEN_WIDTH // 2 - player_car.rect.width // 2
-    screen.blit(player_car.image, (player_screen_x, player_car.rect.y))
+    # Only draw player car if not game over, or draw it differently
+    if player_car.alive(): # Check if player_car sprite still exists
+        player_screen_x = SCREEN_WIDTH // 2 - player_car.rect.width // 2
+        screen.blit(player_car.image, (player_screen_x, player_car.rect.y))
+
+    if game_over:
+        display_game_over_message(screen)
+        # Optionally, add text for restart/quit here and handle input
 
     pygame.display.flip()  # Update the full display
     
