@@ -129,7 +129,7 @@ while running:
         player_car.kill() 
         running = False # End the game or trigger game over state
 
-    # Drawing
+    # Drawing...
     screen.fill(WHITE)  # Fill screen with white
 
     # Draw obstacles with camera offset
