@@ -30,6 +30,17 @@ OBSTACLE_SPRITE_HEIGHT = 16
 SCALED_OBSTACLE_WIDTH = 48
 SCALED_OBSTACLE_HEIGHT = 48
 
+# Background Tile Constants
+DESERT_SPRITESHEET_PATH = "Mini Pixel Pack 2/Levels/Desert_details (16 x 16).png"
+TILE_SPRITE_WIDTH = 16
+TILE_SPRITE_HEIGHT = 16
+SCALED_TILE_WIDTH = 64
+SCALED_TILE_HEIGHT = 64
+NUM_TILE_TYPES = 4
+
+# Background Scroll Speed
+BACKGROUND_SCROLL_SPEED_Y = 2 # Pixels per frame for vertical scroll
+
 # Function to display Game Over message
 def display_game_over_message(surface):
     text_surface = game_over_font.render('Game Over', True, RED)
@@ -51,6 +62,23 @@ except pygame.error as e:
     # Create a placeholder surface if image loading fails
     scaled_player_car_image = pygame.Surface((SCALED_CAR_WIDTH, SCALED_CAR_HEIGHT))
     scaled_player_car_image.fill(BLACK) # Fill with a color, e.g., black
+
+# Load desert background tiles
+desert_tile_images = []
+try:
+    loaded_desert_spritesheet = pygame.image.load(DESERT_SPRITESHEET_PATH).convert_alpha()
+    for i in range(NUM_TILE_TYPES):
+        tile_rect = pygame.Rect(i * TILE_SPRITE_WIDTH, 0, TILE_SPRITE_WIDTH, TILE_SPRITE_HEIGHT)
+        original_tile = loaded_desert_spritesheet.subsurface(tile_rect)
+        scaled_tile = pygame.transform.scale(original_tile, (SCALED_TILE_WIDTH, SCALED_TILE_HEIGHT))
+        desert_tile_images.append(scaled_tile)
+except pygame.error as e:
+    print(f"Unable to load desert tiles: {e}")
+    # Create placeholder surfaces if image loading fails
+    for _ in range(NUM_TILE_TYPES):
+        placeholder_tile = pygame.Surface((SCALED_TILE_WIDTH, SCALED_TILE_HEIGHT))
+        placeholder_tile.fill(WHITE) # Fill with white for now, maybe a sand color later
+        desert_tile_images.append(placeholder_tile)
 
 # Load obstacle spritesheet
 try:
@@ -143,6 +171,37 @@ def reset_game():
 running = True
 clock = pygame.time.Clock() # For managing FPS
 camera_x = 0 # Initialize camera_x
+background_scroll_y = 0 # Initialize vertical scroll offset for background
+
+# Determine number of tiles needed to fill the screen plus a buffer for scrolling
+TILES_HIGH = (SCREEN_HEIGHT + SCALED_TILE_HEIGHT - 1) // SCALED_TILE_HEIGHT
+TILES_WIDE = (SCREEN_WIDTH + SCALED_TILE_WIDTH - 1) // SCALED_TILE_WIDTH
+
+# For initial static display, we might not need more than what fits the screen.
+# For scrolling, we'll need more, typically at least one screen width/height extra.
+# Let's make it twice the screen width for horizontal scrolling.
+# And twice the screen height for vertical scrolling pattern.
+# SCROLL_BUFFER_HORIZONTAL = TILES_WIDE # Number of extra tiles horizontally for smooth scrolling -> incorporated into TILES_WIDE*2
+# SCROLL_BUFFER_VERTICAL = 2 # Number of extra tiles vertically, might not be needed for horizontal scroll only -> incorporated into TILES_HIGH*2
+
+background_layout = []
+if desert_tile_images: # Ensure tiles are loaded
+    tile_weights = [0.5, 0.3, 0.1, 0.1] # Plain, Speckled, Cactus, Rock
+    for r in range(TILES_HIGH * 2): # Make the background taller for vertical scrolling
+        row = []
+        for c in range(TILES_WIDE * 2): # Make the background wider for horizontal scrolling
+            if len(tile_weights) == NUM_TILE_TYPES and NUM_TILE_TYPES > 0:
+                tile_to_use = random.choices(desert_tile_images, weights=tile_weights, k=1)[0]
+            elif desert_tile_images: # Fallback if weights are misconfigured or no tiles
+                tile_to_use = random.choice(desert_tile_images)
+            else:
+                # This case should ideally not be reached if desert_tile_images check at the start is robust
+                # Creating a dummy surface to avoid error if all else fails
+                tile_to_use = pygame.Surface((SCALED_TILE_WIDTH, SCALED_TILE_HEIGHT))
+                tile_to_use.fill(WHITE) # Default to white
+
+            row.append(tile_to_use)
+        background_layout.append(row)
 
 while running:
     for event in pygame.event.get():
@@ -163,17 +222,14 @@ while running:
         player_car.update(keys) # Call update once with the current keys state
 
         # Update camera based on player's position
-        # The camera tries to keep the player in the middle of the screen.
-        # The player's rect.x is its "world" position.
         camera_x = player_car.rect.centerx - SCREEN_WIDTH // 2
-        # Clamp camera to prevent showing too much empty space if the world is smaller than the screen
-        # For now, assume world is at least as wide as the screen, or player is bounded.
-        # If we had a defined world width:
-        # world_width = 1600 # Example world width
-        # if camera_x < 0:
-        #     camera_x = 0
-        # if camera_x > world_width - SCREEN_WIDTH:
-        #     camera_x = world_width - SCREEN_WIDTH
+        # Clamp camera (optional, if world boundaries are defined)
+        # world_width = TILES_WIDE * 2 * SCALED_TILE_WIDTH # Example world width based on background
+        # if camera_x < 0: camera_x = 0
+        # if camera_x > world_width - SCREEN_WIDTH: camera_x = world_width - SCREEN_WIDTH
+        
+        # Update background vertical scroll
+        background_scroll_y = (background_scroll_y - BACKGROUND_SCROLL_SPEED_Y) # Changed + to - for downward scroll
 
         # Spawn obstacles
         obstacle_spawn_timer += 1
@@ -197,6 +253,36 @@ while running:
 
     # Drawing...
     screen.fill(WHITE)  # Fill screen with white
+
+    # Draw background tiles
+    if background_layout and desert_tile_images: # Ensure lists are not empty
+        # Calculate the starting column index and the offset within the first visible tile for X
+        start_col_idx_in_layout = (camera_x // SCALED_TILE_WIDTH)
+        offset_x = camera_x % SCALED_TILE_WIDTH
+
+        # Calculate the starting row index and the offset within the first visible tile for Y
+        start_row_idx_in_layout = (background_scroll_y // SCALED_TILE_HEIGHT)
+        offset_y = background_scroll_y % SCALED_TILE_HEIGHT
+
+        # Calculate how many tiles to draw horizontally & vertically to fill the screen plus one extra
+        num_tiles_to_draw_wide = TILES_WIDE + 1
+        num_tiles_to_draw_high = TILES_HIGH + 1
+        
+        LAYOUT_NUM_ROWS = len(background_layout)
+        LAYOUT_NUM_COLS = len(background_layout[0]) if LAYOUT_NUM_ROWS > 0 else 0
+
+        if LAYOUT_NUM_COLS > 0: # Ensure layout is not empty
+            for j in range(num_tiles_to_draw_high): # Vertical tile iteration (screen rows)
+                actual_layout_row = (start_row_idx_in_layout + j) % LAYOUT_NUM_ROWS
+                screen_y_pos = j * SCALED_TILE_HEIGHT - offset_y
+                
+                for i in range(num_tiles_to_draw_wide): # Horizontal tile iteration (screen columns)
+                    actual_layout_col = (start_col_idx_in_layout + i) % LAYOUT_NUM_COLS
+                    
+                    tile_image = background_layout[actual_layout_row][actual_layout_col]
+                    
+                    screen_x_pos = i * SCALED_TILE_WIDTH - offset_x
+                    screen.blit(tile_image, (screen_x_pos, screen_y_pos))
 
     # Draw obstacles with camera offset
     for obstacle in obstacles:
